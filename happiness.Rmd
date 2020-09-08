@@ -1,0 +1,232 @@
+---
+title: "Determinant of Happiness"
+author: "Meinari"
+date: "3/25/2020"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: 
+        collapsed: false
+    number_sections: true
+    theme: flatly
+    highlight: tango
+  fig_caption: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+options(scipen = 9999)
+rm(list=ls())
+```
+
+# Introduction
+Happiness level in each country is determined by several factors. In this analysis I analyzed the determinant of *happiness* using dataset from a `kaggle.com`. In which, the dataset consist of several macroeconomics variables such as GDP, healthy life expectancy, happiness score, freedom of choice and generosity. The happiness score will be analyzed using linear regression model.
+
+![](happiness.jpeg)
+
+
+# Load Dataset
+```{r}
+happy <- read.csv("2019.csv")
+happiness <- read.csv("happiness.csv")
+```
+
+# Exploratory Data Analysis
+```{r}
+str(happy)
+str(happiness)
+```
+
+## Import Library
+```{r}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(GGally)
+library(MLmetrics)
+library(lmtest)
+library(car)
+```
+
+## Rename variable
+```{r}
+happy <- happy %>% 
+  mutate(rank = Overall.rank,
+         country = Country.or.region,
+         happiness_score = Score,
+         log_GDP = GDP.per.capita,
+         sos_support = Social.support,
+         h_life_exp = Healthy.life.expectancy,
+         freedom = Freedom.to.make.life.choices,
+         generosity = Generosity,
+         corruption = Perceptions.of.corruption) %>% 
+  select(-c(Overall.rank, Country.or.region, Score, GDP.per.capita, Social.support, Healthy.life.expectancy, Freedom.to.make.life.choices, Generosity, Perceptions.of.corruption))
+
+str(happy)
+```
+
+Here is the description of each variable :  
+- **rank** --> Rank country in Happiness   
+- **country** --> name of the country/region  
+- **happiness_score** --> Happiness score  
+- **log_GDP** --> log of GDP per capita  
+- **sos_support** --> social support  
+- **h_life_exp** --> healthy life expectancy  
+- **freedom** --> freedom to make life choice  
+- **generosity** --> generosity rate  
+- **corruption** --> perceptions of corruption  
+
+```{r}
+# check if there is na
+colSums(is.na(happy))
+table(is.na(happy))
+```
+there is no NA in the dataset
+
+```{r}
+#we do not use var 'rank' and 'country' therefore we need to omit first 
+happy1 <- happy %>% 
+  select(-c(rank, country))
+
+#To see correlation among variable
+ggcorr(happy1, label = T, label_size = 2.9, hjust = 1, layout.exp = 2)
+```
+
+Based on the graphic correlation above we know that every variable has positive correlation to `happiness score`
+
+```{r}
+#check distribution of each variable
+boxplot(happy1)
+```
+Based on boxplot above, we can see that there is no outlier on `happiness_score` variable. Therefore we can continue to the next step.
+
+
+# Modelling
+## Selecting Model 
+```{r}
+# model_all consist of all predictors variable to predict '`happiness_score`
+model_all <- lm(happiness_score~.,happy1)
+```
+
+```{r}
+# model_forward using step wise
+model_forward <- step(object = model_all, direction = "forward", trace =F)
+```
+
+```{r}
+# model_backward using step wise
+model_backward <- step(object = model_all, direction = "backward", trace = F)
+```
+
+## Comparing performance of *model_all* / *model_backward* / *model_forward*
+### Model_all
+```{r}
+summary(model_all)
+```
+
+```{r}
+# predicting error model_all
+MAE(
+  y_pred = model_all$fitted.values,
+  y_true = happy1$happiness_score
+)
+```
+
+Based on *model_all* variable `generosity` and `corruption` are not significant. The model performance based on **R-squared** and **error** are **77.03%** and **0.4139** respectively. It shows that *model_all* can explain our predicted variable as 77.03% with error in predictted value around -+0.41.
+
+
+### Model_forward 
+
+```{r}
+summary(model_forward)
+```
+
+```{r}
+# predicting error model_forward
+MAE(
+  y_pred = model_forward$fitted.values,
+  y_true = happy1$happiness_score
+)
+```
+
+Based on *model_forward* variable `generosity` and `corruption` are not significant. The model performance based on **R-squared** and **error** are **77.03%** and **0.4139** respectively. It shows that *model_forward* can explain our predicted variable as 77.03% with error in predictted value around -+0.4139.
+
+### Model_backward
+
+```{r}
+summary(model_backward)
+```
+
+```{r}
+# predicting error model_forward
+MAE(
+  y_pred = model_backward$fitted.values,
+  y_true = happy1$happiness_score
+)
+```
+The model performance based on **R-squared** and **error** are **77.03%** and **0.4132** respectively. It shows that *model_backward* can explain our predicted variable as 77.03% with error in predictted value around -+0.4132. 
+
+### Conclusion of Model Selecting
+
+Compared to *model_all* and *model_forward*, *model_backward* is slightly better since its error is slightly smaller than error of *model_all* and *model_forward*. Therefore we use *model_backward* for the next steps. 
+
+
+# Analysis
+Based on regression analysis we found that all variables have significant impact to `happiness score`, in which in the detail as followed :  
+- **GDP** --> increasing of 1 unit of *log GDP* increase 0.74 of `happiness score`. The higher GDP, the highe happiness rate of that country.  
+- **social support** --> increasing of 1 unit of *social support* increase 1.1 of `happiness score`. The more social support given by people the more happiness they will get.  
+- **healthy life expectancy** --> increasing of 1 unit of *healthy life expectancy* increase 1.08 of `happiness score`. When healthy life expectancy get higher the happier people become.   
+- **freedom** --> increasing of 1 unit of *freedom* increase 1.5 of `happiness score`. Obviously, when people free in making choice they will get happier.  
+- **corruption** --> increasing of 1 unit of *corruption* increase 1.1 of `happiness score`. Perception of corruption has postive impact to the happiness. However compared to other variables (based on p-value score), this has smallest impact to the happiness.   
+
+
+# Checking Assumption
+## Normality Residual  
+```{r}
+hist(model_backward$residuals, breaks = 20)
+```
+
+using **Shapiro test** :
+- Hypothesis:  
+  - H0: Residuals are distributed normally  
+  - H1: Residuals are not distribute normally  
+
+```{r}
+#normality test using shapiro test
+shapiro.test(model_backward$residuals)
+```
+The test result shows that the residuals of model are not distributed normally (p-value < 0.05). As the consequence the model can lead to bias therefore this model is needed to be improved by normalizing the error distribution by using scale or normalization.
+
+## Heteroscedasticity Test
+
+The model should have homoscedasticity in the varians of residual. 
+
+```{r}
+plot(happy1$happiness_score, model_backward$residuals)+abline(h=0, col= "red")
+```
+```{r}
+#heteroscedasticity test using BP test
+bptest(model_backward)
+```
+
+Hypothesis:  
+- H0: Data residual Homogen 
+- H1: Data residual Heteros 
+
+based on the result test, the residual model is heterscedasticity (p-value < 0.05).
+
+## Multicolinearity Test
+
+We want that our model does not have multicolinearity, we will use `vif test` to check that. The vif value has to be smaller than 10 to pass the multicolinearity test.
+
+```{r}
+vif(model_backward)
+```
+Multicolinearity test shows that there is no multicolinearity in the `model_backward`.
+
+# Conclusion
+Our model has a good performance in predicting `happiness_score` based on R-square and error value.  However in assumption tests, our *model_backward* only passed multicolinearity test. The error of model are not distributed normally and there is heteroscedasticity in the model. As a consequence the model could lead into bias when interpretting the model. Therefore the model is needed to be improved by normalizing the error distribution by using scaling or normalization.
+
+# Suggestion
+Based on regression above, it is important for the government to maintan the economic condition (GDP), give society freedom in making choice, maintain that they have healthy life and provide them with good public health service as well support them with social support and increase their perception about corruption level of the country. In which those variables can make people happier.
